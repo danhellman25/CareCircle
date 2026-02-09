@@ -1,19 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { appointments, doctors, careRecipient } from '@/lib/demo-data';
+import { appointments as demoAppointments, doctors as demoDoctors, careRecipient } from '@/lib/demo-data';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase';
 import { formatDate, formatTime, formatDateTime, classNames } from '@/lib/utils';
 import { Calendar, Plus, MapPin, Clock, FileText, ChevronRight, Check } from 'lucide-react';
-import type { Appointment } from '@/types';
+import type { Appointment, Doctor } from '@/types';
 
 export default function AppointmentsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [appointments, setAppointments] = useState<Appointment[]>(demoAppointments);
+  const [doctors, setDoctors] = useState<Doctor[]>(demoDoctors);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [useSupabase, setUseSupabase] = useState(false);
+  
   const [formData, setFormData] = useState({
     doctorName: '',
     specialty: '',
@@ -21,6 +28,74 @@ export default function AppointmentsPage() {
     location: '',
     purpose: '',
   });
+
+  // Fetch appointments from Supabase on mount
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      setUseSupabase(true);
+      fetchAppointments();
+      fetchDoctors();
+    }
+  }, []);
+
+  const fetchAppointments = async () => {
+    if (!isSupabaseConfigured()) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          *,
+          doctor:doctors(*)
+        `)
+        .order('date_time', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching appointments:', error);
+        setError('Failed to load appointments from database. Using demo data.');
+        setAppointments(demoAppointments);
+      } else if (data && data.length > 0) {
+        // Transform data to match Appointment type
+        const transformedAppointments: Appointment[] = data.map((appt: any) => ({
+          ...appt,
+          doctor: appt.doctor || undefined,
+        }));
+        setAppointments(transformedAppointments);
+      } else {
+        setAppointments(demoAppointments);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      setError('Connection error. Using demo data.');
+      setAppointments(demoAppointments);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchDoctors = async () => {
+    if (!isSupabaseConfigured()) return;
+    
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('doctors')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching doctors:', error);
+      } else if (data && data.length > 0) {
+        setDoctors(data);
+      }
+    } catch (err) {
+      console.error('Error fetching doctors:', err);
+    }
+  };
 
   // Sort appointments by date
   const sortedAppointments = [...appointments].sort(
@@ -31,10 +106,87 @@ export default function AppointmentsPage() {
   const upcomingAppointments = sortedAppointments.filter((a) => new Date(a.date_time) > now);
   const pastAppointments = sortedAppointments.filter((a) => new Date(a.date_time) <= now);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Save to backend
-    setIsAddModalOpen(false);
+    
+    if (!formData.doctorName || !formData.dateTime || !formData.purpose) {
+      return;
+    }
+
+    // First, create or find the doctor
+    const doctorId = `doctor-${Date.now()}`;
+    const newDoctor: Doctor = {
+      id: doctorId,
+      recipient_id: careRecipient.id,
+      name: formData.doctorName,
+      specialty: formData.specialty || 'Other',
+      phone: '',
+      address: formData.location,
+      notes: '',
+    };
+
+    // Create the appointment
+    const newAppointment: Appointment = {
+      id: `appt-${Date.now()}`,
+      recipient_id: careRecipient.id,
+      doctor_id: doctorId,
+      date_time: new Date(formData.dateTime).toISOString(),
+      location: formData.location,
+      purpose: formData.purpose,
+      reminder_sent: false,
+      created_by: 'user-1', // Demo user
+      created_at: new Date().toISOString(),
+      doctor: newDoctor,
+    };
+
+    // Save to Supabase if configured
+    if (useSupabase && isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        
+        // First save the doctor
+        const { error: doctorError } = await supabase.from('doctors').insert({
+          id: doctorId,
+          recipient_id: careRecipient.id,
+          name: formData.doctorName,
+          specialty: formData.specialty || 'Other',
+          address: formData.location,
+        });
+
+        if (doctorError) {
+          console.error('Error saving doctor:', doctorError);
+        }
+
+        // Then save the appointment
+        const { error: apptError } = await supabase.from('appointments').insert({
+          recipient_id: careRecipient.id,
+          doctor_id: doctorId,
+          date_time: new Date(formData.dateTime).toISOString(),
+          location: formData.location,
+          purpose: formData.purpose,
+          reminder_sent: false,
+          created_by: 'user-1',
+        });
+
+        if (apptError) {
+          console.error('Error saving appointment:', apptError);
+          setError('Failed to save appointment to database.');
+        } else {
+          // Refresh after successful save
+          fetchAppointments();
+          fetchDoctors();
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        setError('Connection error. Appointment saved locally only.');
+      }
+    }
+
+    // Update local state
+    setAppointments(prev => [...prev, newAppointment]);
+    setDoctors(prev => [...prev, newDoctor]);
+    
+    // Reset form and close modal
     setFormData({
       doctorName: '',
       specialty: '',
@@ -42,6 +194,7 @@ export default function AppointmentsPage() {
       location: '',
       purpose: '',
     });
+    setIsAddModalOpen(false);
   };
 
   const getAppointmentStatus = (appointment: Appointment) => {
@@ -69,6 +222,11 @@ export default function AppointmentsPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-text">Appointments</h1>
           <p className="text-sm sm:text-base text-text-light">Manage {careRecipient.full_name}&apos;s medical appointments</p>
+          {useSupabase && (
+            <Badge variant="primary" size="sm" className="mt-1">
+              {isLoading ? 'Syncing...' : 'Live'}
+            </Badge>
+          )}
         </div>
         <Button onClick={() => setIsAddModalOpen(true)} size="sm" className="sm:text-base sm:px-4 sm:py-2.5">
           <Plus className="w-4 h-4 mr-1.5 sm:mr-2" />
@@ -76,6 +234,12 @@ export default function AppointmentsPage() {
           <span className="sm:hidden">Add Appt</span>
         </Button>
       </div>
+
+      {error && (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Upcoming Appointments */}
       <Card>

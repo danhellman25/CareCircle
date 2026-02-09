@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -8,7 +8,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Avatar } from '@/components/ui/Avatar';
-import { shifts, circleMembers, careCircle, getCurrentShift } from '@/lib/demo-data';
+import { shifts as demoShifts, circleMembers, careCircle, getCurrentShift } from '@/lib/demo-data';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase';
 import { classNames } from '@/lib/utils';
 import { Calendar, Plus, Clock, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import type { Shift } from '@/types';
@@ -42,7 +43,71 @@ const getCaregiverSolidColor = (name: string) => {
 export default function SchedulePage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [shifts, setShifts] = useState<Shift[]>(demoShifts);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [useSupabase, setUseSupabase] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    caregiver_id: '',
+    date: '',
+    start_time: '',
+    end_time: '',
+    is_recurring: 'no',
+    notes: '',
+  });
+
   const currentShift = getCurrentShift();
+
+  // Fetch shifts from Supabase on mount
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      setUseSupabase(true);
+      fetchShifts();
+    }
+  }, []);
+
+  const fetchShifts = async () => {
+    if (!isSupabaseConfigured()) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('shifts')
+        .select(`
+          *,
+          caregiver:profiles(*)
+        `)
+        .order('date', { ascending: true })
+        .order('start_time', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching shifts:', error);
+        setError('Failed to load shifts from database. Using demo data.');
+        setShifts(demoShifts);
+      } else if (data && data.length > 0) {
+        // Transform data to match Shift type
+        const transformedShifts: Shift[] = data.map((shift: any) => ({
+          ...shift,
+          caregiver: shift.caregiver || undefined,
+        }));
+        setShifts(transformedShifts);
+      } else {
+        // No data in database yet, use demo data
+        setShifts(demoShifts);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      setError('Connection error. Using demo data.');
+      setShifts(demoShifts);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Get week dates
   const getWeekDates = (date: Date) => {
@@ -94,6 +159,74 @@ export default function SchedulePage() {
       label: m.profile?.full_name || 'Unknown',
     }));
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.caregiver_id || !formData.date || !formData.start_time || !formData.end_time) {
+      return;
+    }
+
+    const caregiver = circleMembers.find(m => m.user_id === formData.caregiver_id)?.profile;
+    
+    const newShift: Shift = {
+      id: `shift-${Date.now()}`,
+      circle_id: careCircle.id,
+      caregiver_id: formData.caregiver_id,
+      date: formData.date,
+      start_time: formData.start_time,
+      end_time: formData.end_time,
+      is_recurring: formData.is_recurring !== 'no',
+      recurrence_pattern: formData.is_recurring !== 'no' ? { daysOfWeek: [] } : undefined,
+      notes: formData.notes,
+      created_by: circleMembers[0].user_id,
+      created_at: new Date().toISOString(),
+      caregiver: caregiver,
+    };
+
+    // Save to Supabase if configured
+    if (useSupabase && isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        const { error } = await supabase.from('shifts').insert({
+          circle_id: newShift.circle_id,
+          caregiver_id: newShift.caregiver_id,
+          date: newShift.date,
+          start_time: newShift.start_time,
+          end_time: newShift.end_time,
+          is_recurring: newShift.is_recurring,
+          recurrence_pattern: newShift.recurrence_pattern,
+          notes: newShift.notes,
+          created_by: newShift.created_by,
+        });
+
+        if (error) {
+          console.error('Error saving shift:', error);
+          setError('Failed to save shift to database.');
+        } else {
+          // Refresh shifts after successful save
+          fetchShifts();
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        setError('Connection error. Shift saved locally only.');
+      }
+    }
+
+    // Update local state
+    setShifts(prev => [...prev, newShift]);
+    
+    // Reset form and close modal
+    setFormData({
+      caregiver_id: '',
+      date: '',
+      start_time: '',
+      end_time: '',
+      is_recurring: 'no',
+      notes: '',
+    });
+    setIsAddModalOpen(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -101,6 +234,11 @@ export default function SchedulePage() {
         <div>
           <h1 className="text-2xl font-bold text-text">Schedule</h1>
           <p className="text-text-light">Coordinate caregiver shifts for {careCircle.name}</p>
+          {useSupabase && (
+            <Badge variant="primary" size="sm" className="mt-1">
+              {isLoading ? 'Syncing...' : 'Live'}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => navigateWeek('prev')}>
@@ -119,6 +257,12 @@ export default function SchedulePage() {
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Who's on duty now */}
       {currentShift && (
@@ -329,19 +473,41 @@ export default function SchedulePage() {
         title="Add New Shift"
         description="Schedule a caregiver shift"
       >
-        <form className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Select
             label="Caregiver"
             options={caregiverOptions}
+            value={formData.caregiver_id}
+            onChange={(e) => setFormData({ ...formData, caregiver_id: e.target.value })}
             required
           />
-          <Input label="Date" type="date" required />
+          <Input 
+            label="Date" 
+            type="date" 
+            value={formData.date}
+            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+            required 
+          />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Start Time" type="time" required />
-            <Input label="End Time" type="time" required />
+            <Input 
+              label="Start Time" 
+              type="time" 
+              value={formData.start_time}
+              onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+              required 
+            />
+            <Input 
+              label="End Time" 
+              type="time" 
+              value={formData.end_time}
+              onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+              required 
+            />
           </div>
           <Select
             label="Recurring"
+            value={formData.is_recurring}
+            onChange={(e) => setFormData({ ...formData, is_recurring: e.target.value })}
             options={[
               { value: 'no', label: 'No, just this once' },
               { value: 'daily', label: 'Daily' },
@@ -353,6 +519,8 @@ export default function SchedulePage() {
             <label className="block text-sm font-medium text-text mb-1.5">Notes (optional)</label>
             <textarea
               rows={2}
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
               placeholder="Any special instructions for this shift"
             />
