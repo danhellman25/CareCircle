@@ -3,22 +3,15 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Chrome, Heart, UserPlus } from 'lucide-react';
+import { createClient as createCareCircleClient } from '@/lib/supabase';
 
-let _supabase: SupabaseClient | null = null;
 function getSupabase() {
-  if (!_supabase) {
-    _supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-  }
-  return _supabase;
+  return createCareCircleClient();
 }
 
 const roleOptions = [
@@ -87,8 +80,9 @@ export default function SignupPage() {
           setSuccess(true);
         }
       }
-    } catch (err) {
-      setError('Something went wrong. Please try again.');
+    } catch (err: any) {
+      setError(err?.message || 'Something went wrong. Please try again.');
+      console.error('Signup error:', err);
     } finally {
       setIsLoading(false);
     }

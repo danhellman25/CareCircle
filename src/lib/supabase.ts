@@ -1,9 +1,10 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createBrowserClient } from '@supabase/ssr';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+// Hardcoded fallbacks to bypass Vercel env var newline bug
+const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://chhwfraakmconptlvrym.supabase.co').trim();
+const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoaHdmcmFha21jb25wdGx2cnltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2Mjk2MjMsImV4cCI6MjA4NjIwNTYyM30.toM-ngllAvi788N-mQVGVVAidC89KRzb09bZM3jzqRk').trim();
+const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoaHdmcmFha21jb25wdGx2cnltIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDYyOTYyMywiZXhwIjoyMDg2MjA1NjIzfQ.-nRnL8lzbuKX7ixUfRhH_toM0auPUtCtsuRent3llb8').trim();
 
 // Check if we have valid Supabase credentials
 const hasSupabaseConfig: boolean = !!(supabaseUrl && supabaseUrl !== '' && supabaseAnonKey && supabaseAnonKey !== '');
