@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { medications, getTodaysMedications, careRecipient } from '@/lib/demo-data';
-import { Pill, Plus, Clock, Check, X, AlertCircle } from 'lucide-react';
+import { getMedications, getMedicationLogs, logMedication, addMedication, getCareRecipient, DEMO_IDS } from '@/lib/data';
+import { Pill, Plus, Clock, Check, X, AlertCircle, RefreshCw } from 'lucide-react';
 import type { Medication } from '@/types';
 
 type MedStatus = 'given' | 'missed' | 'skipped' | 'pending';
@@ -18,49 +18,123 @@ interface MedicationDose {
   medication: Medication;
   time: string;
   status: MedStatus;
+  logId?: string;
 }
 
+const frequencyLabels: Record<string, string> = {
+  daily: 'Once daily',
+  twice_daily: 'Twice daily',
+  three_times_daily: 'Three times daily',
+  weekly: 'Weekly',
+  as_needed: 'As needed',
+};
+
 export default function MedicationsPage() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [careRecipient, setCareRecipient] = useState<any>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [doses, setDoses] = useState<MedicationDose[]>(() => {
-    // Generate today's doses from medications
-    const allDoses: MedicationDose[] = [];
-    medications.forEach((med) => {
-      if (med.frequency === 'as_needed') return;
-      med.times_of_day.forEach((time, index) => {
-        allDoses.push({
-          id: `${med.id}-${time}`,
-          medication: med,
-          time,
-          status: Math.random() > 0.5 ? 'given' : 'pending',
-        });
-      });
-    });
-    return allDoses.sort((a, b) => a.time.localeCompare(b.time));
+  const [doses, setDoses] = useState<MedicationDose[]>([]);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    dosage: '',
+    frequency: 'daily',
+    times_of_day: '',
+    instructions: '',
   });
 
-  const updateDoseStatus = (doseId: string, status: MedStatus) => {
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    setIsLoading(true);
+    try {
+      const [meds, recipient, logs] = await Promise.all([
+        getMedications(),
+        getCareRecipient(),
+        getMedicationLogs(),
+      ]);
+
+      setMedications(meds);
+      setCareRecipient(recipient);
+
+      // Generate today's doses from medications
+      const allDoses: MedicationDose[] = [];
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      meds.forEach((med) => {
+        if (med.frequency === 'as_needed') return;
+        med.times_of_day.forEach((time) => {
+          // Find matching log if any
+          const matchingLog = logs.find(
+            log => log.medication_id === med.id && log.scheduled_time.includes(todayStr) && log.scheduled_time.includes(time)
+          );
+          
+          allDoses.push({
+            id: `${med.id}-${time}`,
+            medication: med,
+            time,
+            status: (matchingLog?.status as MedStatus) || 'pending',
+            logId: matchingLog?.id,
+          });
+        });
+      });
+      
+      setDoses(allDoses.sort((a, b) => a.time.localeCompare(b.time)));
+    } catch (err) {
+      console.error('Error loading medications:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  const updateDoseStatus = async (doseId: string, status: MedStatus) => {
+    const dose = doses.find(d => d.id === doseId);
+    if (!dose) return;
+
+    // Optimistically update UI
     setDoses((prev) =>
-      prev.map((dose) => (dose.id === doseId ? { ...dose, status } : dose))
+      prev.map((d) => (d.id === doseId ? { ...d, status } : d))
     );
+
+    // Save to database
+    if (status !== 'pending') {
+      await logMedication(dose.medication.id, status, '', DEMO_IDS.user);
+    }
+  };
+
+  const handleAddMedication = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const timesOfDay = formData.times_of_day
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
+    const result = await addMedication({
+      recipient_id: DEMO_IDS.recipient,
+      name: formData.name,
+      dosage: formData.dosage,
+      frequency: formData.frequency as any,
+      times_of_day: timesOfDay,
+      instructions: formData.instructions,
+      is_active: true,
+    });
+
+    if (result) {
+      setIsAddModalOpen(false);
+      setFormData({ name: '', dosage: '', frequency: 'daily', times_of_day: '', instructions: '' });
+      await loadData();
+    }
   };
 
   const givenCount = doses.filter((d) => d.status === 'given').length;
   const totalCount = doses.length;
   const progressPercentage = totalCount > 0 ? (givenCount / totalCount) * 100 : 0;
-
-  const getStatusIcon = (status: MedStatus) => {
-    switch (status) {
-      case 'given':
-        return <Check className="w-4 h-4 text-green-600" />;
-      case 'missed':
-        return <X className="w-4 h-4 text-red-500" />;
-      case 'skipped':
-        return <AlertCircle className="w-4 h-4 text-yellow-600" />;
-      default:
-        return null;
-    }
-  };
 
   const getStatusBadge = (status: MedStatus) => {
     switch (status) {
@@ -75,13 +149,13 @@ export default function MedicationsPage() {
     }
   };
 
-  const frequencyLabels: Record<string, string> = {
-    daily: 'Once daily',
-    twice_daily: 'Twice daily',
-    three_times_daily: 'Three times daily',
-    weekly: 'Weekly',
-    as_needed: 'As needed',
-  };
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -89,7 +163,7 @@ export default function MedicationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text">Medications</h1>
-          <p className="text-text-light">Track {careRecipient.full_name}&apos;s medications</p>
+          <p className="text-text-light">Track {careRecipient?.full_name || 'care recipient'}&apos;s medications</p>
         </div>
         <Button onClick={() => setIsAddModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
@@ -281,6 +355,12 @@ export default function MedicationsPage() {
                 </div>
               </div>
             ))}
+            {medications.length === 0 && (
+              <div className="text-center py-8 text-text-light">
+                <Pill className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <p>No medications added yet</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -292,11 +372,25 @@ export default function MedicationsPage() {
         title="Add New Medication"
         description="Add a new medication to the care plan"
       >
-        <form className="space-y-4">
-          <Input label="Medication Name" placeholder="e.g., Metformin" required />
-          <Input label="Dosage" placeholder="e.g., 500mg" required />
+        <form onSubmit={handleAddMedication} className="space-y-4">
+          <Input 
+            label="Medication Name" 
+            placeholder="e.g., Metformin" 
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            required 
+          />
+          <Input 
+            label="Dosage" 
+            placeholder="e.g., 500mg" 
+            value={formData.dosage}
+            onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
+            required 
+          />
           <Select
             label="Frequency"
+            value={formData.frequency}
+            onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
             options={[
               { value: 'daily', label: 'Once daily' },
               { value: 'twice_daily', label: 'Twice daily' },
@@ -306,11 +400,19 @@ export default function MedicationsPage() {
             ]}
             required
           />
-          <Input label="Times of Day" placeholder="e.g., 08:00, 20:00" helperText="Separate times with commas" />
+          <Input 
+            label="Times of Day" 
+            placeholder="e.g., 08:00, 20:00" 
+            helperText="Separate times with commas"
+            value={formData.times_of_day}
+            onChange={(e) => setFormData({ ...formData, times_of_day: e.target.value })}
+          />
           <div>
             <label className="block text-sm font-medium text-text mb-1.5">Instructions</label>
             <textarea
               rows={3}
+              value={formData.instructions}
+              onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
               className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
               placeholder="Take with food, etc."
             />

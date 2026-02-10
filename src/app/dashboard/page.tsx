@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -10,17 +10,21 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import {
-  currentUser,
-  careCircle,
-  careRecipient,
+  getCareRecipient,
+  getCareCircle,
   getCurrentShift,
-  getTodaysMedications,
+  getShifts,
+  getMedications,
+  getMedicationLogs,
   getRecentCareLogs,
   getUpcomingAppointments,
-  shifts,
-  medicationLogs,
-  appointments,
-} from '@/lib/demo-data';
+  addCareLog,
+  logMedication,
+  addAppointment,
+  seedDemoData,
+  checkDemoDataExists,
+  DEMO_IDS,
+} from '@/lib/data';
 import { formatDate, formatTime, formatRelativeTime, formatDateTime } from '@/lib/utils';
 import {
   Clock,
@@ -32,8 +36,10 @@ import {
   Heart,
   Activity,
   Users,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
-import type { CareLogCategory } from '@/types';
+import type { CareLogCategory, Shift, CareLog, Medication, MedicationLog, Appointment } from '@/types';
 
 const careLogCategoryColors: Record<CareLogCategory, string> = {
   meal: 'bg-orange-100 text-orange-700',
@@ -54,26 +60,197 @@ const careLogCategoryLabels: Record<CareLogCategory, string> = {
 };
 
 export default function DashboardPage() {
-  const currentShift = getCurrentShift();
-  const todaysMeds = getTodaysMedications();
-  const recentLogs = getRecentCareLogs(5);
-  const upcomingAppointments = getUpcomingAppointments();
-  const nextAppointment = upcomingAppointments[0];
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [needsSeed, setNeedsSeed] = useState(false);
+  
+  // Data states
+  const [careRecipient, setCareRecipient] = useState<any>(null);
+  const [careCircle, setCareCircle] = useState<any>(null);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [currentShift, setCurrentShift] = useState<Shift | null>(null);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [medicationLogs, setMedicationLogs] = useState<MedicationLog[]>([]);
+  const [careLogs, setCareLogs] = useState<CareLog[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [nextAppointment, setNextAppointment] = useState<Appointment | null>(null);
 
-  const givenCount = todaysMeds.filter((m) => m.status === 'given').length;
-  const totalCount = todaysMeds.length;
-  const progressPercentage = totalCount > 0 ? (givenCount / totalCount) * 100 : 0;
-
+  // Modal states
   const [isAddEntryModalOpen, setIsAddEntryModalOpen] = useState(false);
   const [isAddMedModalOpen, setIsAddMedModalOpen] = useState(false);
   const [isAddApptModalOpen, setIsAddApptModalOpen] = useState(false);
+  
+  // Form states
+  const [careLogForm, setCareLogForm] = useState({ category: 'note' as CareLogCategory, content: '' });
+  const [medLogForm, setMedLogForm] = useState({ medication_id: '', status: 'given' as const, notes: '' });
+  const [apptForm, setApptForm] = useState({ doctorName: '', specialty: '', dateTime: '', location: '', purpose: '' });
+
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Check if demo data exists
+      const exists = await checkDemoDataExists();
+      if (!exists) {
+        setNeedsSeed(true);
+      }
+
+      // Load all data in parallel
+      const [
+        recipient,
+        circle,
+        shiftsData,
+        meds,
+        medLogs,
+        logs,
+        appts,
+      ] = await Promise.all([
+        getCareRecipient(),
+        getCareCircle(),
+        getShifts(),
+        getMedications(),
+        getMedicationLogs(),
+        getRecentCareLogs(5),
+        getUpcomingAppointments(),
+      ]);
+
+      setCareRecipient(recipient);
+      setCareCircle(circle);
+      setShifts(shiftsData);
+      setCurrentShift(getCurrentShift(shiftsData));
+      setMedications(meds);
+      setMedicationLogs(medLogs);
+      setCareLogs(logs);
+      setAppointments(appts);
+      setNextAppointment(appts[0] || null);
+    } catch (err: any) {
+      setError('Failed to load dashboard data. Using demo data.');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleSeedData() {
+    setIsLoading(true);
+    const result = await seedDemoData();
+    if (result.success) {
+      setNeedsSeed(false);
+      await loadData();
+    } else {
+      setError(result.error || 'Failed to seed demo data');
+    }
+    setIsLoading(false);
+  }
+
+  async function handleAddCareLog(e: React.FormEvent) {
+    e.preventDefault();
+    if (!careLogForm.content) return;
+
+    const result = await addCareLog({
+      circle_id: DEMO_IDS.circle,
+      recipient_id: DEMO_IDS.recipient,
+      author_id: DEMO_IDS.user,
+      category: careLogForm.category,
+      content: careLogForm.content,
+      logged_at: new Date().toISOString(),
+    });
+
+    if (result) {
+      setIsAddEntryModalOpen(false);
+      setCareLogForm({ category: 'note', content: '' });
+      await loadData();
+    }
+  }
+
+  async function handleLogMedication(e: React.FormEvent) {
+    e.preventDefault();
+    if (!medLogForm.medication_id) return;
+
+    const success = await logMedication(
+      medLogForm.medication_id,
+      medLogForm.status,
+      medLogForm.notes,
+      DEMO_IDS.user
+    );
+
+    if (success) {
+      setIsAddMedModalOpen(false);
+      setMedLogForm({ medication_id: '', status: 'given', notes: '' });
+      await loadData();
+    }
+  }
+
+  async function handleAddAppointment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!apptForm.doctorName || !apptForm.dateTime || !apptForm.purpose) return;
+
+    // First create the doctor
+    const doctorId = `doctor-${Date.now()}`;
+    
+    // Then create the appointment
+    const result = await addAppointment({
+      recipient_id: DEMO_IDS.recipient,
+      doctor_id: doctorId,
+      date_time: new Date(apptForm.dateTime).toISOString(),
+      location: apptForm.location,
+      purpose: apptForm.purpose,
+      reminder_sent: false,
+      created_by: DEMO_IDS.user,
+    });
+
+    if (result) {
+      setIsAddApptModalOpen(false);
+      setApptForm({ doctorName: '', specialty: '', dateTime: '', location: '', purpose: '' });
+      await loadData();
+    }
+  }
+
+  const givenCount = medicationLogs.filter((m) => m.status === 'given').length;
+  const totalCount = medicationLogs.length;
+  const progressPercentage = totalCount > 0 ? (givenCount / totalCount) * 100 : 0;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todaysShifts = shifts.filter(s => s.date === todayStr);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {/* Error / Seed Banner */}
+      {(error || needsSeed) && (
+        <div className={`p-4 rounded-xl flex items-center gap-3 ${needsSeed ? 'bg-blue-50 border border-blue-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+          <AlertCircle className={`w-5 h-5 ${needsSeed ? 'text-blue-600' : 'text-yellow-600'}`} />
+          <div className="flex-1">
+            <p className={`text-sm ${needsSeed ? 'text-blue-800' : 'text-yellow-800'}`}>
+              {needsSeed ? 'No demo data found in Supabase. Seed the database to get started.' : error}
+            </p>
+          </div>
+          {needsSeed && (
+            <Button onClick={handleSeedData} size="sm" variant="primary">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Seed Demo Data
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-text">Dashboard</h1>
-        <p className="text-text-light">Overview of {careRecipient.full_name}&apos;s care today</p>
+        <p className="text-text-light">Overview of {careRecipient?.full_name || 'care recipient'}&apos;s care today</p>
       </div>
 
       {/* Quick Stats Grid */}
@@ -146,7 +323,7 @@ export default function DashboardPage() {
             </div>
             {nextAppointment ? (
               <div>
-                <p className="font-medium text-text">{nextAppointment.doctor?.name}</p>
+                <p className="font-medium text-text">{nextAppointment.doctor?.name || 'Doctor'}</p>
                 <p className="text-sm text-text-light">
                   {formatDateTime(nextAppointment.date_time)}
                 </p>
@@ -169,11 +346,11 @@ export default function DashboardPage() {
               <span className="font-medium text-text">Care Recipient</span>
             </div>
             <div className="flex items-center gap-3">
-              <Avatar src={careRecipient.photo_url} name={careRecipient.full_name} size="md" />
+              <Avatar src={careRecipient?.photo_url} name={careRecipient?.full_name} size="md" />
               <div>
-                <p className="font-medium text-text">{careRecipient.full_name}</p>
+                <p className="font-medium text-text">{careRecipient?.full_name}</p>
                 <p className="text-xs text-text-light">
-                  {careRecipient.medical_conditions.length} conditions
+                  {careRecipient?.medical_conditions?.length || 0} conditions
                 </p>
               </div>
             </div>
@@ -223,7 +400,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentLogs.map((log) => (
+              {careLogs.map((log) => (
                 <div key={log.id} className="flex gap-3 p-3 rounded-xl bg-background">
                   <Avatar
                     src={log.author?.avatar_url}
@@ -247,6 +424,12 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ))}
+              {careLogs.length === 0 && (
+                <div className="text-center py-6 text-text-light">
+                  <ClipboardList className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No care logs yet</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -256,7 +439,7 @@ export default function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Today&apos;s Schedule</CardTitle>
-              <CardDescription>Who&apos;s caring for {careRecipient.full_name} today</CardDescription>
+              <CardDescription>Who&apos;s caring for {careRecipient?.full_name || 'care recipient'} today</CardDescription>
             </div>
             <Link href="/dashboard/schedule">
               <Button variant="ghost" size="sm">
@@ -267,43 +450,40 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {shifts
-                .filter((s) => s.date === new Date().toISOString().split('T')[0])
-                .map((shift) => {
-                  const isCurrent = currentShift?.id === shift.id;
-                  return (
+              {todaysShifts.map((shift) => {
+                const isCurrent = currentShift?.id === shift.id;
+                return (
+                  <div
+                    key={shift.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl ${
+                      isCurrent ? 'bg-secondary-light border border-secondary/30' : 'bg-background'
+                    }`}
+                  >
                     <div
-                      key={shift.id}
-                      className={`flex items-center gap-3 p-3 rounded-xl ${
-                        isCurrent ? 'bg-secondary-light border border-secondary/30' : 'bg-background'
+                      className={`w-1 h-10 rounded-full ${
+                        isCurrent ? 'bg-secondary' : 'bg-gray-300'
                       }`}
-                    >
-                      <div
-                        className={`w-1 h-10 rounded-full ${
-                          isCurrent ? 'bg-secondary' : 'bg-gray-300'
-                        }`}
-                      />
-                      <Avatar
-                        src={shift.caregiver?.avatar_url}
-                        name={shift.caregiver?.full_name}
-                        size="sm"
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium text-text">{shift.caregiver?.full_name}</p>
-                        <p className="text-sm text-text-light">
-                          {shift.start_time} - {shift.end_time}
-                        </p>
-                      </div>
-                      {isCurrent && (
-                        <Badge variant="success" size="sm">
-                          On Duty
-                        </Badge>
-                      )}
+                    />
+                    <Avatar
+                      src={shift.caregiver?.avatar_url}
+                      name={shift.caregiver?.full_name}
+                      size="sm"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-text">{shift.caregiver?.full_name}</p>
+                      <p className="text-sm text-text-light">
+                        {shift.start_time} - {shift.end_time}
+                      </p>
                     </div>
-                  );
-                })}
-              {shifts.filter((s) => s.date === new Date().toISOString().split('T')[0]).length ===
-                0 && (
+                    {isCurrent && (
+                      <Badge variant="success" size="sm">
+                        On Duty
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })}
+              {todaysShifts.length === 0 && (
                 <div className="text-center py-6 text-text-light">
                   <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p>No shifts scheduled for today</p>
@@ -326,9 +506,11 @@ export default function DashboardPage() {
         title="Add Care Log Entry"
         description="Record a note about care activities, mood, or observations"
       >
-        <form className="space-y-4">
+        <form onSubmit={handleAddCareLog} className="space-y-4">
           <Select
             label="Category"
+            value={careLogForm.category}
+            onChange={(e) => setCareLogForm({ ...careLogForm, category: e.target.value as CareLogCategory })}
             options={[
               { value: 'meal', label: 'Meal' },
               { value: 'mood', label: 'Mood' },
@@ -342,8 +524,11 @@ export default function DashboardPage() {
             <label className="block text-sm font-medium text-text mb-1.5">Notes</label>
             <textarea
               rows={4}
+              value={careLogForm.content}
+              onChange={(e) => setCareLogForm({ ...careLogForm, content: e.target.value })}
               className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
               placeholder="What happened? How did they seem?"
+              required
             />
           </div>
           <div className="flex gap-3 pt-2">
@@ -369,18 +554,18 @@ export default function DashboardPage() {
         title="Log Medication"
         description="Record medication administration"
       >
-        <form className="space-y-4">
+        <form onSubmit={handleLogMedication} className="space-y-4">
           <Select
             label="Medication"
-            options={[
-              { value: 'med-1', label: 'Metformin 500mg' },
-              { value: 'med-2', label: 'Lisinopril 10mg' },
-              { value: 'med-3', label: 'Atorvastatin 20mg' },
-              { value: 'med-4', label: 'Ibuprofen 400mg' },
-            ]}
+            value={medLogForm.medication_id}
+            onChange={(e) => setMedLogForm({ ...medLogForm, medication_id: e.target.value })}
+            options={medications.map(m => ({ value: m.id, label: `${m.name} ${m.dosage}` }))}
+            required
           />
           <Select
             label="Status"
+            value={medLogForm.status}
+            onChange={(e) => setMedLogForm({ ...medLogForm, status: e.target.value as any })}
             options={[
               { value: 'given', label: 'Given' },
               { value: 'missed', label: 'Missed' },
@@ -392,6 +577,8 @@ export default function DashboardPage() {
             <label className="block text-sm font-medium text-text mb-1.5">Notes (optional)</label>
             <textarea
               rows={2}
+              value={medLogForm.notes}
+              onChange={(e) => setMedLogForm({ ...medLogForm, notes: e.target.value })}
               className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
               placeholder="Any observations?"
             />
@@ -419,11 +606,20 @@ export default function DashboardPage() {
         title="Schedule Appointment"
         description="Add a new appointment to the calendar"
       >
-        <form className="space-y-4">
-          <Input label="Doctor Name" placeholder="Dr. Smith" />
+        <form onSubmit={handleAddAppointment} className="space-y-4">
+          <Input 
+            label="Doctor Name" 
+            placeholder="Dr. Smith" 
+            value={apptForm.doctorName}
+            onChange={(e) => setApptForm({ ...apptForm, doctorName: e.target.value })}
+            required 
+          />
           <Select
             label="Specialty"
+            value={apptForm.specialty}
+            onChange={(e) => setApptForm({ ...apptForm, specialty: e.target.value })}
             options={[
+              { value: '', label: 'Select specialty...' },
               { value: 'primary', label: 'Primary Care' },
               { value: 'cardiology', label: 'Cardiology' },
               { value: 'endocrinology', label: 'Endocrinology' },
@@ -432,9 +628,26 @@ export default function DashboardPage() {
               { value: 'other', label: 'Other' },
             ]}
           />
-          <Input label="Date & Time" type="datetime-local" />
-          <Input label="Location" placeholder="123 Medical Center Dr" />
-          <Input label="Purpose" placeholder="Annual checkup" />
+          <Input 
+            label="Date & Time" 
+            type="datetime-local" 
+            value={apptForm.dateTime}
+            onChange={(e) => setApptForm({ ...apptForm, dateTime: e.target.value })}
+            required 
+          />
+          <Input 
+            label="Location" 
+            placeholder="123 Medical Center Dr" 
+            value={apptForm.location}
+            onChange={(e) => setApptForm({ ...apptForm, location: e.target.value })}
+          />
+          <Input 
+            label="Purpose" 
+            placeholder="Annual checkup" 
+            value={apptForm.purpose}
+            onChange={(e) => setApptForm({ ...apptForm, purpose: e.target.value })}
+            required 
+          />
           <div className="flex gap-3 pt-2">
             <Button
               type="button"
