@@ -7,10 +7,15 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Heart, Mail, Lock, Chrome } from 'lucide-react';
-import { createClient as createCareCircleClient } from '@/lib/supabase';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
+const SUPABASE_URL = 'https://chhwfraakmconptlvrym.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoaHdmcmFha21jb25wdGx2cnltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2Mjk2MjMsImV4cCI6MjA4NjIwNTYyM30.toM-ngllAvi788N-mQVGVVAidC89KRzb09bZM3jzqRk';
+
+let _supabase: ReturnType<typeof createSupabaseClient> | null = null;
 function getSupabase() {
-  return createCareCircleClient();
+  if (!_supabase) _supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return _supabase;
 }
 
 export default function LoginPage() {
