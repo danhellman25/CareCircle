@@ -21,7 +21,7 @@ export function Hero() {
 
           {/* Headline */}
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-text leading-tight mb-4 sm:mb-6">
-            Your family&apos;s care,{' '}
+            Your family's care,{' '}
             <span className="text-primary">organized.</span>
           </h1>
 
@@ -60,14 +60,14 @@ export function Hero() {
                 <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-red-400" />
                 <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-yellow-400" />
                 <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-green-400" />
-                <div className="ml-3 sm:ml-4 text-white/80 text-xs sm:text-sm truncate">Mom&apos;s Care Team - Dashboard</div>
+                <div className="ml-3 sm:ml-4 text-white/80 text-xs sm:text-sm truncate">Mom's Care Team - Dashboard</div>
               </div>
               <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 {/* Mock dashboard cards */}
                 <div className="bg-secondary-light rounded-lg sm:rounded-xl p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-2 sm:mb-3">
                     <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-secondary-dark" />
-                    <span className="font-medium text-text text-sm sm:text-base">Who&apos;s on duty</span>
+                    <span className="font-medium text-text text-sm sm:text-base">Who's on duty</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-secondary" />
@@ -80,7 +80,7 @@ export function Hero() {
                 <div className="bg-primary-light rounded-lg sm:rounded-xl p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-2 sm:mb-3">
                     <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                    <span className="font-medium text-text text-sm sm:text-base">Today&apos;s Medications</span>
+                    <span className="font-medium text-text text-sm sm:text-base">Today's Medications</span>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">

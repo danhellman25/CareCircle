@@ -4,13 +4,13 @@ const testimonials = [
   {
     name: 'Sarah M.',
     role: 'Daughter & Care Coordinator',
-    content: 'CareCircle has been a lifesaver for our family. We used to text back and forth constantly about Mom&apos;s medications. Now everything is in one place, and we all stay in sync.',
+    content: "CareCircle has been a lifesaver for our family. We used to text back and forth constantly about Mom's medications. Now everything is in one place, and we all stay in sync.",
     rating: 5,
   },
   {
     name: 'Robert K.',
     role: 'Son & Primary Caregiver',
-    content: 'I was juggling a full-time job and caring for my dad. The schedule feature alone is worth the price. My sister can see when I&apos;m on duty and when she needs to step in.',
+    content: "I was juggling a full-time job and caring for my dad. The schedule feature alone is worth the price. My sister can see when I'm on duty and when she needs to step in.",
     rating: 5,
   },
   {

@@ -1,16 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { Avatar } from '@/components/ui/Avatar';
-import { careLogs, careRecipient, circleMembers } from '@/lib/demo-data';
+import { careLogs as demoCareLogs, careRecipient, circleMembers } from '@/lib/demo-data';
+import { getCareLogs, addCareLog, DEMO_IDS } from '@/lib/data';
 import { formatRelativeTime, formatDateTime } from '@/lib/utils';
 import { ClipboardList, Plus, Filter, Utensils, Smile, Activity, AlertCircle, Heart, FileText } from 'lucide-react';
-import type { CareLogCategory } from '@/types';
+import type { CareLog, CareLogCategory } from '@/types';
 
 const categoryConfig: Record<
   CareLogCategory,
@@ -67,10 +68,31 @@ const filterOptions = [
 export default function CareLogPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [careLogs, setCareLogs] = useState<CareLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     category: 'note' as CareLogCategory,
     content: '',
   });
+
+  // Load care logs on mount
+  useEffect(() => {
+    loadCareLogs();
+  }, []);
+
+  async function loadCareLogs() {
+    setIsLoading(true);
+    try {
+      const logs = await getCareLogs();
+      setCareLogs(logs);
+    } catch (err) {
+      console.error('Error loading care logs:', err);
+      setCareLogs(demoCareLogs);
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   const filteredLogs =
     selectedFilter === 'all'
@@ -82,11 +104,31 @@ export default function CareLogPage() {
     (a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime()
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Save to backend
-    setIsAddModalOpen(false);
-    setFormData({ category: 'note', content: '' });
+    if (!formData.content.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      const result = await addCareLog({
+        circle_id: DEMO_IDS.circle,
+        recipient_id: DEMO_IDS.recipient,
+        author_id: DEMO_IDS.user,
+        category: formData.category,
+        content: formData.content,
+        logged_at: new Date().toISOString(),
+      });
+
+      if (result) {
+        setIsAddModalOpen(false);
+        setFormData({ category: 'note', content: '' });
+        await loadCareLogs(); // Refresh the list
+      }
+    } catch (err) {
+      console.error('Error saving care log:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -97,7 +139,7 @@ export default function CareLogPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-text">Care Log</h1>
           <p className="text-sm sm:text-base text-text-light">Daily updates and observations for {careRecipient.full_name}</p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)} size="sm" className="sm:text-base sm:px-4 sm:py-2.5">
+        <Button onClick={() => setIsAddModalOpen(true)} size="sm" className="sm:text-base sm:px-4 sm:py-2.5" isLoading={isLoading}>
           <Plus className="w-4 h-4 mr-1.5 sm:mr-2" />
           Add Entry
         </Button>
@@ -124,7 +166,12 @@ export default function CareLogPage() {
 
       {/* Care Log Feed */}
       <div className="space-y-4">
-        {sortedLogs.map((log) => {
+        {isLoading && (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        )}
+        {!isLoading && sortedLogs.map((log) => {
           const config = categoryConfig[log.category];
           const Icon = config.icon;
 
@@ -173,7 +220,7 @@ export default function CareLogPage() {
           );
         })}
 
-        {sortedLogs.length === 0 && (
+        {!isLoading && sortedLogs.length === 0 && (
           <div className="text-center py-12">
             <ClipboardList className="w-12 h-12 mx-auto mb-3 text-text-muted opacity-30" />
             <p className="text-text-light">No entries found</p>
@@ -232,7 +279,7 @@ export default function CareLogPage() {
             >
               Cancel
             </Button>
-            <Button type="submit" className="flex-1">
+            <Button type="submit" className="flex-1" isLoading={isSubmitting}>
               Save Entry
             </Button>
           </div>

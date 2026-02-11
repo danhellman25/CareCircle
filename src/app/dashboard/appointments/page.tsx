@@ -221,7 +221,7 @@ export default function AppointmentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-text">Appointments</h1>
-          <p className="text-sm sm:text-base text-text-light">Manage {careRecipient.full_name}&apos;s medical appointments</p>
+          <p className="text-sm sm:text-base text-text-light">Manage {careRecipient.full_name}'s medical appointments</p>
           {useSupabase && (
             <Badge variant="primary" size="sm" className="mt-1">
               {isLoading ? 'Syncing...' : 'Live'}

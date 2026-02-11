@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Menu,
   X,
+  Clock,
 } from 'lucide-react';
 import { useState } from 'react';
 import { classNames } from '@/lib/utils';
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'Care Log', href: '/dashboard/care-log', icon: ClipboardList },
   { name: 'Appointments', href: '/dashboard/appointments', icon: FileText },
   { name: 'Team', href: '/dashboard/team', icon: Users },
+  { name: 'Time Tracking', href: '/dashboard/time-tracking', icon: Clock },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 

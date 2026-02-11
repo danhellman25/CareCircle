@@ -250,7 +250,7 @@ export default function DashboardPage() {
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-text">Dashboard</h1>
-        <p className="text-text-light">Overview of {careRecipient?.full_name || 'care recipient'}&apos;s care today</p>
+        <p className="text-text-light">Overview of {careRecipient?.full_name || "care recipient's"} care today</p>
       </div>
 
       {/* Quick Stats Grid */}
@@ -260,7 +260,7 @@ export default function DashboardPage() {
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-3">
               <Clock className="w-5 h-5 text-secondary-dark" />
-              <span className="font-medium text-text">Who&apos;s on duty</span>
+              <span className="font-medium text-text">Who's on duty</span>
             </div>
             {currentShift ? (
               <div className="flex items-center gap-3">
@@ -295,7 +295,7 @@ export default function DashboardPage() {
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-3">
               <Pill className="w-5 h-5 text-primary" />
-              <span className="font-medium text-text">Today&apos;s Medications</span>
+              <span className="font-medium text-text">Today's Medications</span>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -438,8 +438,8 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Today&apos;s Schedule</CardTitle>
-              <CardDescription>Who&apos;s caring for {careRecipient?.full_name || 'care recipient'} today</CardDescription>
+              <CardTitle>Today's Schedule</CardTitle>
+              <CardDescription>Who's caring for {careRecipient?.full_name || 'care recipient'} today</CardDescription>
             </div>
             <Link href="/dashboard/schedule">
               <Button variant="ghost" size="sm">

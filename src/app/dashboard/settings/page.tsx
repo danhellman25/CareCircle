@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { currentUser, careRecipient, careCircle } from '@/lib/demo-data';
+import { currentUser as demoCurrentUser, careRecipient, careCircle } from '@/lib/demo-data';
+import { getCurrentUser } from '@/lib/data';
+import { createClient } from '@/lib/supabase';
 import { Settings, User, CreditCard, Bell, Heart, Save } from 'lucide-react';
+import type { Profile } from '@/types';
 
 interface ToggleProps {
   enabled: boolean;
@@ -32,11 +35,13 @@ function Toggle({ enabled, onChange }: ToggleProps) {
 }
 
 export default function SettingsPage() {
+  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [profile, setProfile] = useState({
-    name: currentUser.full_name,
-    email: currentUser.email,
-    phone: currentUser.phone || '',
+    name: '',
+    email: '',
+    phone: '',
   });
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const [notifications, setNotifications] = useState({
     medicationReminders: true,
@@ -48,11 +53,51 @@ export default function SettingsPage() {
 
   const [isSaving, setIsSaving] = useState(false);
 
+  // Load current user on mount
+  useEffect(() => {
+    async function loadUser() {
+      const user = await getCurrentUser();
+      setCurrentUser(user);
+      setProfile({
+        name: user.full_name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+      });
+    }
+    loadUser();
+  }, []);
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    // TODO: Save profile
-    setTimeout(() => setIsSaving(false), 900);
+    setSaveMessage(null);
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: profile.name,
+          email: profile.email,
+          phone: profile.phone,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentUser?.id || 'user-1');
+
+      if (error) {
+        console.error('Error saving profile:', error);
+        setSaveMessage('Error saving profile. Please try again.');
+      } else {
+        setSaveMessage('Profile saved successfully!');
+        // Clear success message after 3 seconds
+        setTimeout(() => setSaveMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      setSaveMessage('Error saving profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -71,6 +116,11 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSaveProfile} className="space-y-4">
+            {saveMessage && (
+              <div className={`p-3 rounded-lg text-sm ${saveMessage.includes('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                {saveMessage}
+              </div>
+            )}
             <Input
               label="Full Name"
               value={profile.name}

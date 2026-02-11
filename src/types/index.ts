@@ -133,3 +133,65 @@ export interface Appointment {
   created_at: string;
   doctor?: Doctor;
 }
+
+// ============================================
+// TIME TRACKING TYPES
+// ============================================
+
+export interface WorkLocation {
+  id: string;
+  circle_id: string;
+  name: string;
+  address?: string;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  is_active: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimeEntry {
+  id: string;
+  user_id: string;
+  circle_id: string;
+  location_id?: string;
+  clock_in: string;
+  clock_out?: string;
+  clock_in_lat?: number;
+  clock_in_lng?: number;
+  clock_in_distance_meters?: number;
+  clock_out_lat?: number;
+  clock_out_lng?: number;
+  clock_out_distance_meters?: number;
+  is_override: boolean;
+  override_by?: string;
+  override_reason?: string;
+  duration_minutes?: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  user?: Profile;
+  location?: WorkLocation;
+  override_by_profile?: Profile;
+}
+
+export interface PayPeriodSummary {
+  total_hours: number;
+  days_worked: number;
+  entries_count: number;
+  period_start: string;
+  period_end: string;
+}
+
+export interface ClockInOutData {
+  location_id?: string;
+  latitude: number;
+  longitude: number;
+  distance_meters: number;
+  notes?: string;
+}
+
+export type GPSStatus = 'loading' | 'success' | 'error' | 'denied' | 'unavailable';

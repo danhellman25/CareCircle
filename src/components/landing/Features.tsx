@@ -9,7 +9,7 @@ const features = [
   },
   {
     name: 'Caregiver Schedule',
-    description: 'Coordinate who&apos;s on duty with an easy-to-use calendar. Color-coded shifts make it clear at a glance.',
+    description: "Coordinate who's on duty with an easy-to-use calendar. Color-coded shifts make it clear at a glance.",
     icon: Calendar,
     color: 'bg-green-100 text-green-600',
   },
@@ -21,7 +21,7 @@ const features = [
   },
   {
     name: 'Family Dashboard',
-    description: 'See everything at a glance—who&apos;s on duty, medication status, recent updates, and upcoming appointments.',
+    description: "See everything at a glance—who's on duty, medication status, recent updates, and upcoming appointments.",
     icon: Users,
     color: 'bg-orange-100 text-orange-600',
   },
@@ -33,7 +33,7 @@ const features = [
   },
   {
     name: 'Secure & Private',
-    description: 'Bank-level encryption keeps your family&apos;s health information safe and secure. HIPAA compliant.',
+    description: "Bank-level encryption keeps your family's health information safe and secure. HIPAA compliant.",
     icon: Shield,
     color: 'bg-teal-100 text-teal-600',
   },

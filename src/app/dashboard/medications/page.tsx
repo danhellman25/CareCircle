@@ -163,7 +163,7 @@ export default function MedicationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text">Medications</h1>
-          <p className="text-text-light">Track {careRecipient?.full_name || 'care recipient'}&apos;s medications</p>
+          <p className="text-text-light">Track {careRecipient?.full_name || "care recipient's"} medications</p>
         </div>
         <Button onClick={() => setIsAddModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
@@ -174,7 +174,7 @@ export default function MedicationsPage() {
       {/* Today's Tracker */}
       <Card>
         <CardHeader>
-          <CardTitle>Today&apos;s Tracker</CardTitle>
+          <CardTitle>Today's Tracker</CardTitle>
           <CardDescription>
             {givenCount} of {totalCount} doses completed
           </CardDescription>
